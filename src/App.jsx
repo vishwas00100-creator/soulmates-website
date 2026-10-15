@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import Auth from './Auth.jsx';
 import {
   Heart,
   Menu,
@@ -11,6 +12,18 @@ import {
 } from 'lucide-react';
 
 export default function App() {
+  const [showAuth, setShowAuth] = useState(false);
+  const [authMode, setAuthMode] = useState('signup');
+
+  if (showAuth) {
+    return (
+      <Auth
+        initialMode={authMode}
+        onClose={() => setShowAuth(false)}
+      />
+    );
+  }
+
   return (
     <div className="app">
       <header className="navbar">
