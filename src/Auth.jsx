@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { supabase } from './supabaseClient';
 import { Heart, ArrowLeft, Mail, Lock, User } from 'lucide-react';
 
-export default function Auth({ onClose }) {
-  const [mode, setMode] = useState('signup');
+export default function Auth({ onClose, initialMode = 'signup' }) {
+  const [mode, setMode] = useState(initialMode);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
