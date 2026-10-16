@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import Auth from './Auth.jsx';
 import ProfileSetup from './ProfileSetup.jsx';
+import Discover from './Discover.jsx';
 import { supabase } from './supabaseClient';
 import {
   Heart,
   LogOut,
   UserRound,
-  LoaderCircle
+  LoaderCircle,
+  Compass
 } from 'lucide-react';
 
 export default function App() {
@@ -15,7 +17,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [showAuth, setShowAuth] = useState(false);
   const [authMode, setAuthMode] = useState('signup');
-  const [profileComplete, setProfileComplete] = useState(false);
+  const [page, setPage] = useState('discover');
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -29,7 +31,6 @@ export default function App() {
         } = await supabase.auth.getSession();
 
         if (sessionError) throw sessionError;
-
         if (!active) return;
 
         setSession(currentSession);
@@ -48,31 +49,37 @@ export default function App() {
 
     const {
       data: { subscription }
-    } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (!active) return;
+
+      setSession(newSession);
+      setError('');
+
+      if (!newSession) {
+        setProfile(null);
+        setShowAuth(false);
+        setPage('discover');
+        setLoading(false);
+        return;
+      }
+
+      setShowAuth(false);
+      setLoading(true);
+
+      // Defer profile loading to avoid running another Supabase
+      // request directly inside the authentication callback.
+      setTimeout(async () => {
         if (!active) return;
 
-        setSession(newSession);
-        setError('');
-
-        if (newSession) {
-          setShowAuth(false);
-          setLoading(true);
-
-          try {
-            await loadProfile(newSession.user.id);
-          } catch (err) {
-            if (active) setError(err.message);
-          } finally {
-            if (active) setLoading(false);
-          }
-        } else {
-          setProfile(null);
-          setProfileComplete(false);
-          setLoading(false);
+        try {
+          await loadProfile(newSession.user.id);
+        } catch (err) {
+          if (active) setError(err.message);
+        } finally {
+          if (active) setLoading(false);
         }
-      }
-    );
+      }, 0);
+    });
 
     return () => {
       active = false;
@@ -90,7 +97,6 @@ export default function App() {
     if (profileError) throw profileError;
 
     setProfile(data);
-    setProfileComplete(Boolean(data));
   }
 
   async function handleLogout() {
@@ -103,8 +109,8 @@ export default function App() {
 
     setSession(null);
     setProfile(null);
-    setProfileComplete(false);
     setShowAuth(false);
+    setPage('discover');
   }
 
   function openAuth(mode) {
@@ -115,22 +121,31 @@ export default function App() {
 
   if (loading) {
     return (
-      <div style={styles.center}>
-        <LoaderCircle size={30} />
+      <main style={styles.center}>
+        <LoaderCircle size={35} />
         <p>Loading Soulmates...</p>
-      </div>
+      </main>
     );
   }
 
-  if (session && !profileComplete) {
+  if (session && !profile) {
     return (
       <ProfileSetup
-        onComplete={() => loadProfile(session.user.id)}
+        onComplete={async () => {
+          await loadProfile(session.user.id);
+          setPage('discover');
+        }}
       />
     );
   }
 
-  if (session && profileComplete) {
+  if (session && profile && page === 'discover') {
+    return (
+      <Discover onLogout={handleLogout} />
+    );
+  }
+
+  if (session && profile && page === 'profile') {
     return (
       <main style={styles.page}>
         <header style={styles.header}>
@@ -139,10 +154,7 @@ export default function App() {
             SOULMATES<span>.</span>
           </div>
 
-          <button
-            onClick={handleLogout}
-            style={styles.logout}
-          >
+          <button style={styles.button} onClick={handleLogout}>
             <LogOut size={17} />
             Log out
           </button>
@@ -153,32 +165,25 @@ export default function App() {
             <UserRound size={42} />
           </div>
 
-          <p style={styles.eyebrow}>
-            YOUR SOULMATES PROFILE
-          </p>
+          <p style={styles.eyebrow}>YOUR SOULMATES PROFILE</p>
 
-          <h1>
-            Welcome, {profile?.full_name || 'friend'}! ❤️
-          </h1>
+          <h1>Welcome, {profile.full_name || 'friend'}! ❤️</h1>
 
           <p style={styles.bio}>
-            {profile?.bio || 'Your story starts here.'}
+            {profile.bio || 'Your story starts here.'}
           </p>
 
-          {profile?.city && (
+          {(profile.city || profile.country) && (
             <p style={styles.detail}>
-              📍 {profile.city}
-              {profile.country ? `, ${profile.country}` : ''}
+              📍 {[profile.city, profile.country].filter(Boolean).join(', ')}
             </p>
           )}
 
-          {profile?.gender && (
-            <p style={styles.detail}>
-              Gender: {profile.gender}
-            </p>
+          {profile.gender && (
+            <p style={styles.detail}>Gender: {profile.gender}</p>
           )}
 
-          {profile?.interests?.length > 0 && (
+          {profile.interests?.length > 0 && (
             <div style={styles.interests}>
               {profile.interests.map(interest => (
                 <span key={interest} style={styles.interest}>
@@ -188,13 +193,26 @@ export default function App() {
             </div>
           )}
 
-          <p style={styles.notice}>
-            Your profile has been saved. Next, we'll build
-            discovery and matching features.
-          </p>
-
-          {error && <p style={styles.error}>{error}</p>}
+          <button
+            style={styles.primary}
+            onClick={() => setPage('discover')}
+          >
+            <Compass size={18} />
+            Discover people
+          </button>
         </section>
+
+        <nav style={styles.bottomNav}>
+          <button onClick={() => setPage('discover')}>
+            <Compass size={20} />
+            Discover
+          </button>
+
+          <button onClick={() => setPage('profile')}>
+            <UserRound size={20} />
+            Profile
+          </button>
+        </nav>
       </main>
     );
   }
@@ -217,7 +235,7 @@ export default function App() {
         </div>
 
         <button
-          style={styles.login}
+          style={styles.button}
           onClick={() => openAuth('login')}
         >
           Log in
@@ -226,21 +244,12 @@ export default function App() {
 
       <section style={styles.hero}>
         <div style={styles.heartIcon}>
-          <Heart fill="currentColor" size={34} />
+          <Heart fill="currentColor" size={35} />
         </div>
 
-        <p style={styles.eyebrow}>
-          WHERE HEARTS FIND EACH OTHER
-        </p>
+        <p style={styles.eyebrow}>WHERE HEARTS FIND EACH OTHER</p>
 
-        <h1
-          style={{
-            fontSize: 'clamp(36px, 7vw, 58px)',
-            lineHeight: 1.15,
-            letterSpacing: '-1.5px',
-            margin: '20px 0'
-          }}
-        >
+        <h1>
           Some connections
           <br />
           just feel like <span style={styles.highlight}>home.</span>
@@ -277,7 +286,6 @@ const styles = {
     padding: '20px',
     boxSizing: 'border-box'
   },
-
   center: {
     minHeight: '100vh',
     display: 'flex',
@@ -288,7 +296,6 @@ const styles = {
     fontFamily: "'DM Sans', sans-serif",
     color: '#d94f70'
   },
-
   header: {
     maxWidth: '1100px',
     margin: '0 auto',
@@ -297,7 +304,6 @@ const styles = {
     alignItems: 'center',
     gap: '12px'
   },
-
   brand: {
     display: 'flex',
     alignItems: 'center',
@@ -306,35 +312,23 @@ const styles = {
     fontWeight: 800,
     letterSpacing: '1px'
   },
-
-  login: {
-    border: '1px solid #eadfe3',
-    borderRadius: '10px',
-    padding: '10px 18px',
-    background: '#fff',
-    color: '#43353b',
-    cursor: 'pointer'
-  },
-
-  logout: {
+  button: {
     display: 'flex',
     alignItems: 'center',
     gap: '7px',
     border: '1px solid #eadfe3',
     borderRadius: '10px',
-    padding: '10px 14px',
+    padding: '10px 15px',
     background: '#fff',
     color: '#43353b',
     cursor: 'pointer'
   },
-
   hero: {
     maxWidth: '720px',
-    margin: '90px auto 40px',
+    margin: '75px auto 40px',
     textAlign: 'center',
     padding: '20px 0'
   },
-
   heartIcon: {
     width: '70px',
     height: '70px',
@@ -346,18 +340,15 @@ const styles = {
     background: '#ffe8ed',
     color: '#e65b79'
   },
-
   eyebrow: {
     color: '#d94f70',
     fontSize: '11px',
     fontWeight: 800,
     letterSpacing: '1.5px'
   },
-
   highlight: {
     color: '#e65b79'
   },
-
   description: {
     maxWidth: '500px',
     margin: '20px auto 28px',
@@ -365,8 +356,11 @@ const styles = {
     fontSize: '16px',
     lineHeight: 1.8
   },
-
   primary: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
     border: 'none',
     borderRadius: '13px',
     padding: '16px 28px',
@@ -376,23 +370,20 @@ const styles = {
     fontSize: '15px',
     cursor: 'pointer'
   },
-
   note: {
     marginTop: '18px',
     color: '#8a7b82',
     fontSize: '12px'
   },
-
   profileCard: {
     maxWidth: '560px',
-    margin: '70px auto',
+    margin: '60px auto',
     padding: '35px 25px',
     background: '#fff',
     borderRadius: '24px',
     textAlign: 'center',
     boxShadow: '0 20px 70px rgba(120, 40, 65, 0.10)'
   },
-
   avatar: {
     width: '90px',
     height: '90px',
@@ -404,26 +395,23 @@ const styles = {
     background: '#ffe8ed',
     color: '#e65b79'
   },
-
   bio: {
     color: '#7d6e75',
     lineHeight: 1.8,
     overflowWrap: 'anywhere'
   },
-
   detail: {
     color: '#65545c',
     fontSize: '14px'
   },
-
   interests: {
     display: 'flex',
     justifyContent: 'center',
     flexWrap: 'wrap',
     gap: '8px',
-    marginTop: '20px'
+    marginTop: '20px',
+    marginBottom: '25px'
   },
-
   interest: {
     padding: '8px 12px',
     borderRadius: '20px',
@@ -431,14 +419,14 @@ const styles = {
     color: '#b63e5d',
     fontSize: '13px'
   },
-
-  notice: {
-    marginTop: '28px',
-    color: '#8a7b82',
-    fontSize: '13px',
-    lineHeight: 1.7
+  bottomNav: {
+    display: 'flex',
+    justifyContent: 'center',
+    gap: '35px',
+    padding: '15px',
+    margin: '20px auto 0',
+    color: '#d94f70'
   },
-
   error: {
     color: '#b42318',
     textAlign: 'center',
