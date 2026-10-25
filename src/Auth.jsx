@@ -1,322 +1,348 @@
 import React, { useState } from 'react';
-import { supabase } from './supabaseClient';
-import { Heart, ArrowLeft, Mail, Lock, User } from 'lucide-react';
+import { supabase } from './supabaseClient.js';
+import {
+  Heart,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  LoaderCircle,
+  ArrowLeft,
+} from 'lucide-react';
 
-export default function Auth({ onClose, initialMode = 'signup' }) {
+export default function Auth({
+  onSuccess,
+  onBack,
+  initialMode = 'login',
+}) {
   const [mode, setMode] = useState(initialMode);
-  const [name, setName] = useState('');
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
 
-  async function handleSubmit(event) {
-    event.preventDefault();
-    setLoading(true);
+  const clearMessages = () => {
     setMessage('');
+    setError('');
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    clearMessages();
+
+    if (!supabase) {
+      setError(
+        'The Supabase connection is not configured. Please check src/supabaseClient.js.'
+      );
+      return;
+    }
+
+    if (!email.trim()) {
+      setError('Please enter your email address.');
+      return;
+    }
+
+    if (mode !== 'forgot' && password.length < 6) {
+      setError('Your password must contain at least 6 characters.');
+      return;
+    }
+
+    if (mode === 'signup' && !fullName.trim()) {
+      setError('Please enter your name.');
+      return;
+    }
+
+    setLoading(true);
 
     try {
       if (mode === 'signup') {
-        const { data, error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            data: { full_name: name }
-          }
-        });
+        const { data, error: signupError } =
+          await supabase.auth.signUp({
+            email: email.trim(),
+            password,
+            options: {
+              data: {
+                full_name: fullName.trim(),
+              },
+              emailRedirectTo: window.location.origin +
+                import.meta.env.BASE_URL,
+            },
+          });
 
-        if (error) throw error;
+        if (signupError) throw signupError;
+
+        if (data.session) {
+          setMessage('Your account has been created successfully!');
+
+          if (onSuccess) onSuccess(data.session);
+        } else {
+          setMessage(
+            'Account created! Please check your email and confirm your account before logging in.'
+          );
+          setMode('login');
+        }
+      } else if (mode === 'login') {
+        const { data, error: loginError } =
+          await supabase.auth.signInWithPassword({
+            email: email.trim(),
+            password,
+          });
+
+        if (loginError) throw loginError;
+
+        setMessage('Login successful!');
+
+        if (onSuccess) onSuccess(data.session);
+      } else if (mode === 'forgot') {
+        const redirectTo =
+          window.location.origin + import.meta.env.BASE_URL;
+
+        const { error: resetError } =
+          await supabase.auth.resetPasswordForEmail(
+            email.trim(),
+            { redirectTo }
+          );
+
+        if (resetError) throw resetError;
 
         setMessage(
-          data.user && !data.session
-            ? 'Account created! Check your email for a confirmation link.'
-            : 'Welcome to Soulmates! Your account is ready.'
+          'If an account exists for this email, password-reset instructions will be sent.'
         );
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password
-        });
-
-        if (error) throw error;
-
-        setMessage('You are logged in successfully!');
       }
-    } catch (error) {
-      setMessage(error.message || 'Something went wrong. Please try again.');
+    } catch (err) {
+      setError(
+        err?.message || 'Something went wrong. Please try again.'
+      );
     } finally {
       setLoading(false);
     }
-  }
+  };
+
+  const changeMode = (nextMode) => {
+    clearMessages();
+    setMode(nextMode);
+  };
 
   return (
-    <div style={styles.overlay}>
-      <div style={styles.card}>
-        <button onClick={onClose} style={styles.backButton}>
-          <ArrowLeft size={18} /> Back to home
+    <div className="auth-page">
+      <div className="auth-card">
+        <button
+          type="button"
+          className="auth-back"
+          onClick={onBack}
+          aria-label="Go back"
+        >
+          <ArrowLeft size={19} />
+          <span>Back</span>
         </button>
 
-        <div style={styles.logo}>
-          <Heart size={27} fill="currentColor" />
+        <div className="auth-brand">
+          <div className="auth-brand-icon">
+            <Heart size={26} fill="currentColor" />
+          </div>
+
+          <h1>Soulmates</h1>
+
+          <p>
+            {mode === 'signup'
+              ? 'Your next beautiful chapter starts here.'
+              : mode === 'forgot'
+                ? 'Let’s help you get back in.'
+                : 'Real connections. Meaningful relationships.'}
+          </p>
         </div>
 
-        <h1 style={styles.title}>
-          {mode === 'signup' ? 'Find your person.' : 'Welcome back.'}
-        </h1>
-
-        <p style={styles.subtitle}>
-          {mode === 'signup'
-            ? 'Your next chapter could start with a hello.'
-            : 'Your next chapter is waiting for you.'}
-        </p>
-
-        <div style={styles.switcher}>
+        <div className="auth-tabs">
           <button
-            onClick={() => {
-              setMode('signup');
-              setMessage('');
-            }}
-            style={{
-              ...styles.switchButton,
-              ...(mode === 'signup' ? styles.activeSwitch : {})
-            }}
+            type="button"
+            className={mode !== 'signup' && mode !== 'forgot' ? 'active' : ''}
+            onClick={() => changeMode('login')}
           >
-            Create account
+            Log in
           </button>
 
           <button
-            onClick={() => {
-              setMode('login');
-              setMessage('');
-            }}
-            style={{
-              ...styles.switchButton,
-              ...(mode === 'login' ? styles.activeSwitch : {})
-            }}
+            type="button"
+            className={mode === 'signup' ? 'active' : ''}
+            onClick={() => changeMode('signup')}
           >
-            Log in
+            Sign up
           </button>
         </div>
 
         <form onSubmit={handleSubmit}>
           {mode === 'signup' && (
-            <label style={styles.label}>
-              Your name
-              <span style={styles.inputWrap}>
-                <User size={18} />
+            <div className="auth-field">
+              <label htmlFor="auth-name">Full name</label>
+
+              <div className="auth-input-wrap">
                 <input
-                  style={styles.input}
+                  id="auth-name"
                   type="text"
                   placeholder="Enter your name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  value={fullName}
+                  onChange={(event) =>
+                    setFullName(event.target.value)
+                  }
                   autoComplete="name"
                   required
                 />
-              </span>
-            </label>
+              </div>
+            </div>
           )}
 
-          <label style={styles.label}>
-            Email address
-            <span style={styles.inputWrap}>
-              <Mail size={18} />
+          <div className="auth-field">
+            <label htmlFor="auth-email">Email address</label>
+
+            <div className="auth-input-wrap">
+              <Mail size={19} />
+
               <input
-                style={styles.input}
+                id="auth-email"
                 type="email"
                 placeholder="you@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(event) =>
+                  setEmail(event.target.value)
+                }
                 autoComplete="email"
                 required
               />
-            </span>
-          </label>
+            </div>
+          </div>
 
-          <label style={styles.label}>
-            Password
-            <span style={styles.inputWrap}>
-              <Lock size={18} />
-              <input
-                style={styles.input}
-                type="password"
-                placeholder="At least 8 characters"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete={
-                  mode === 'signup' ? 'new-password' : 'current-password'
-                }
-                minLength={8}
-                required
-              />
-            </span>
-          </label>
+          {mode !== 'forgot' && (
+            <div className="auth-field">
+              <label htmlFor="auth-password">Password</label>
 
-          {mode === 'signup' && (
-            <p style={styles.ageNote}>
-              By creating an account, you confirm that you are at least 18.
-            </p>
+              <div className="auth-input-wrap">
+                <Lock size={19} />
+
+                <input
+                  id="auth-password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="At least 6 characters"
+                  value={password}
+                  onChange={(event) =>
+                    setPassword(event.target.value)
+                  }
+                  autoComplete={
+                    mode === 'signup'
+                      ? 'new-password'
+                      : 'current-password'
+                  }
+                  minLength={6}
+                  required
+                />
+
+                <button
+                  type="button"
+                  className="auth-password-toggle"
+                  onClick={() =>
+                    setShowPassword((previous) => !previous)
+                  }
+                  aria-label={
+                    showPassword ? 'Hide password' : 'Show password'
+                  }
+                >
+                  {showPassword
+                    ? <EyeOff size={19} />
+                    : <Eye size={19} />}
+                </button>
+              </div>
+            </div>
           )}
 
-          <button style={styles.submitButton} disabled={loading}>
-            {loading
-              ? 'Please wait...'
-              : mode === 'signup'
-                ? 'Create my account →'
-                : 'Log in →'}
+          {mode === 'login' && (
+            <div className="auth-forgot-row">
+              <button
+                type="button"
+                className="auth-text-button"
+                onClick={() => changeMode('forgot')}
+              >
+                Forgot password?
+              </button>
+            </div>
+          )}
+
+          {error && (
+            <div className="auth-alert auth-alert-error" role="alert">
+              {error}
+            </div>
+          )}
+
+          {message && (
+            <div
+              className="auth-alert auth-alert-success"
+              role="status"
+            >
+              {message}
+            </div>
+          )}
+
+          <button
+            className="auth-submit"
+            type="submit"
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <LoaderCircle className="auth-spinner" size={20} />
+                Please wait...
+              </>
+            ) : (
+              <>
+                {mode === 'signup'
+                  ? 'Create account'
+                  : mode === 'forgot'
+                    ? 'Send reset email'
+                    : 'Log in'}
+
+                <ArrowRight size={19} />
+              </>
+            )}
           </button>
         </form>
 
-        {message && (
-          <div role="status" aria-live="polite" style={styles.message}>
-            {message}
-          </div>
+        {mode === 'forgot' && (
+          <button
+            type="button"
+            className="auth-text-button auth-return-login"
+            onClick={() => changeMode('login')}
+          >
+            Return to login
+          </button>
         )}
 
-        <p style={styles.footerNote}>
-          Your journey matters. Your privacy matters, too. ❤️
+        {mode !== 'forgot' && (
+          <p className="auth-switch">
+            {mode === 'signup'
+              ? 'Already have an account?'
+              : 'New to Soulmates?'}
+
+            <button
+              type="button"
+              className="auth-text-button"
+              onClick={() =>
+                changeMode(
+                  mode === 'signup' ? 'login' : 'signup'
+                )
+              }
+            >
+              {mode === 'signup' ? 'Log in' : 'Join for free'}
+            </button>
+          </p>
+        )}
+
+        <p className="auth-terms">
+          By continuing, you agree to use Soulmates respectfully
+          and follow our community guidelines.
         </p>
       </div>
     </div>
   );
 }
-
-const styles = {
-  overlay: {
-    minHeight: '100vh',
-    background: 'linear-gradient(135deg, #fff8f8, #fff0f2)',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: '24px 16px',
-    boxSizing: 'border-box',
-    fontFamily: "'DM Sans', sans-serif"
-  },
-  card: {
-    width: '100%',
-    maxWidth: '430px',
-    background: '#ffffff',
-    borderRadius: '25px',
-    padding: '28px',
-    boxSizing: 'border-box',
-    boxShadow: '0 20px 70px rgba(120, 40, 65, 0.10)'
-  },
-  backButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    border: 'none',
-    background: 'transparent',
-    color: '#71646a',
-    cursor: 'pointer',
-    padding: '5px 0',
-    fontSize: '14px'
-  },
-  logo: {
-    width: '54px',
-    height: '54px',
-    borderRadius: '18px',
-    background: '#ffe8ed',
-    color: '#e65b79',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: '25px'
-  },
-  title: {
-    fontSize: '32px',
-    lineHeight: 1.2,
-    letterSpacing: '-1px',
-    margin: '22px 0 8px',
-    color: '#30232a'
-  },
-  subtitle: {
-    color: '#7d6e75',
-    lineHeight: 1.6,
-    fontSize: '14px',
-    marginBottom: '25px'
-  },
-  switcher: {
-    display: 'flex',
-    background: '#fff2f4',
-    padding: '5px',
-    borderRadius: '12px',
-    marginBottom: '24px'
-  },
-  switchButton: {
-    flex: 1,
-    padding: '12px 6px',
-    border: 'none',
-    borderRadius: '9px',
-    background: 'transparent',
-    color: '#806c74',
-    cursor: 'pointer',
-    fontWeight: 600
-  },
-  activeSwitch: {
-    background: '#ffffff',
-    color: '#d94f70',
-    boxShadow: '0 2px 8px rgba(70, 20, 40, 0.07)'
-  },
-  label: {
-    display: 'block',
-    marginBottom: '17px',
-    color: '#43353b',
-    fontSize: '13px',
-    fontWeight: 600
-  },
-  inputWrap: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    border: '1px solid #eadfe3',
-    borderRadius: '12px',
-    padding: '0 13px',
-    marginTop: '8px',
-    color: '#b18a98',
-    minHeight: '49px'
-  },
-  input: {
-    width: '100%',
-    minWidth: 0,
-    border: 'none',
-    outline: 'none',
-    background: 'transparent',
-    fontSize: '14px',
-    color: '#30232a'
-  },
-  ageNote: {
-    fontSize: '12px',
-    color: '#82727a',
-    lineHeight: 1.5,
-    margin: '0 0 17px'
-  },
-  submitButton: {
-    width: '100%',
-    border: 'none',
-    borderRadius: '12px',
-    padding: '15px',
-    background: 'linear-gradient(100deg, #ed6a86, #df5074)',
-    color: '#ffffff',
-    fontWeight: 700,
-    fontSize: '15px',
-    cursor: 'pointer'
-  },
-  message: {
-    marginTop: '18px',
-    padding: '12px',
-    borderRadius: '10px',
-    background: '#fff2f4',
-    color: '#9e3854',
-    fontSize: '13px',
-    lineHeight: 1.6,
-    overflowWrap: 'anywhere'
-  },
-  footerNote: {
-    textAlign: 'center',
-    color: '#8a7b82',
-    fontSize: '12px',
-    lineHeight: 1.6,
-    margin: '24px 0 0'
-  }
-};
