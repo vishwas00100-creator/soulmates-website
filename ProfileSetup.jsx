@@ -1,309 +1,358 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { supabase } from './supabaseClient';
 import {
   Heart,
   User,
-  Calendar,
   MapPin,
+  Calendar,
   Sparkles,
-  ArrowRight,
   LoaderCircle,
-  CheckCircle
+  CheckCircle,
 } from 'lucide-react';
 
+const INTEREST_OPTIONS = [
+  'Travel',
+  'Music',
+  'Movies',
+  'Reading',
+  'Fitness',
+  'Cooking',
+  'Photography',
+  'Gaming',
+  'Nature',
+  'Art',
+  'Technology',
+  'Sports',
+  'Dancing',
+  'Food',
+  'Pets',
+];
+
 export default function ProfileSetup({ onComplete }) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
   const [form, setForm] = useState({
     full_name: '',
     date_of_birth: '',
     gender: '',
+    country: '',
+    city: '',
     bio: '',
     interests: [],
-    country: '',
-    city: ''
   });
 
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState('');
-  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    async function loadProfile() {
+      if (!supabase) {
+        setError('Supabase is not configured.');
+        setLoading(false);
+        return;
+      }
 
-  const availableInterests = [
-    'Music',
-    'Travel',
-    'Movies',
-    'Cooking',
-    'Fitness',
-    'Reading',
-    'Photography',
-    'Gaming',
-    'Nature',
-    'Technology',
-    'Art',
-    'Sports'
-  ];
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !user) {
+        setError('Please log in to create your profile.');
+        setLoading(false);
+        return;
+      }
+
+      const { data, error: profileError } = await supabase
+        .from('profiles')
+        .select(
+          'full_name, date_of_birth, gender, country, city, bio, interests'
+        )
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (profileError) {
+        setError(profileError.message);
+      } else if (data) {
+        setForm((previous) => ({
+          ...previous,
+          ...data,
+          interests: Array.isArray(data.interests)
+            ? data.interests
+            : [],
+        }));
+      } else if (user.user_metadata?.full_name) {
+        setForm((previous) => ({
+          ...previous,
+          full_name: user.user_metadata.full_name,
+        }));
+      }
+
+      setLoading(false);
+    }
+
+    loadProfile();
+  }, []);
 
   function updateField(event) {
     const { name, value } = event.target;
 
-    setForm(previous => ({
+    setForm((previous) => ({
       ...previous,
-      [name]: value
+      [name]: value,
     }));
   }
 
   function toggleInterest(interest) {
-    setForm(previous => ({
+    setForm((previous) => ({
       ...previous,
       interests: previous.interests.includes(interest)
-        ? previous.interests.filter(item => item !== interest)
-        : [...previous.interests, interest]
+        ? previous.interests.filter((item) => item !== interest)
+        : [...previous.interests, interest],
     }));
   }
 
   async function handleSubmit(event) {
     event.preventDefault();
-    setLoading(true);
-    setMessage('');
-    setSaved(false);
+    setError('');
+    setSuccess('');
+
+    if (!supabase) {
+      setError('Supabase is not configured.');
+      return;
+    }
+
+    if (!form.full_name.trim()) {
+      setError('Please enter your full name.');
+      return;
+    }
+
+    if (!form.date_of_birth) {
+      setError('Please enter your date of birth.');
+      return;
+    }
+
+    const birthDate = new Date(`${form.date_of_birth}T00:00:00`);
+    const today = new Date();
+    const adultCutoff = new Date(
+      today.getFullYear() - 18,
+      today.getMonth(),
+      today.getDate()
+    );
+
+    if (
+      Number.isNaN(birthDate.getTime()) ||
+      birthDate > adultCutoff
+    ) {
+      setError('Soulmates is for adults aged 18 and over.');
+      return;
+    }
+
+    if (!form.gender) {
+      setError('Please select your gender.');
+      return;
+    }
+
+    setSaving(true);
 
     try {
       const {
         data: { user },
-        error: userError
+        error: userError,
       } = await supabase.auth.getUser();
 
       if (userError) throw userError;
 
       if (!user) {
-        throw new Error(
-          'Please log in before creating your profile.'
-        );
+        throw new Error('Your session has expired. Please log in again.');
       }
 
-      const birthDate = new Date(
-        `${form.date_of_birth}T00:00:00`
-      );
+      const profile = {
+        id: user.id,
+        full_name: form.full_name.trim(),
+        date_of_birth: form.date_of_birth,
+        gender: form.gender,
+        country: form.country.trim(),
+        city: form.city.trim(),
+        bio: form.bio.trim(),
+        interests: form.interests,
+        updated_at: new Date().toISOString(),
+      };
 
-      const today = new Date();
-      let age = today.getFullYear() - birthDate.getFullYear();
-
-      const monthDifference =
-        today.getMonth() - birthDate.getMonth();
-
-      if (
-        monthDifference < 0 ||
-        (monthDifference === 0 &&
-          today.getDate() < birthDate.getDate())
-      ) {
-        age--;
-      }
-
-      if (
-        !form.date_of_birth ||
-        Number.isNaN(birthDate.getTime()) ||
-        age < 18 ||
-        birthDate > today
-      ) {
-        throw new Error(
-          'Soulmates is for adults aged 18 and above. Please enter a valid date of birth.'
-        );
-      }
-
-      if (!form.full_name.trim()) {
-        throw new Error('Please enter your name.');
-      }
-
-      const { error } = await supabase
+      const { error: saveError } = await supabase
         .from('profiles')
-        .upsert(
-          {
-            id: user.id,
-            full_name: form.full_name.trim(),
-            date_of_birth: form.date_of_birth,
-            gender: form.gender || null,
-            bio: form.bio.trim(),
-            interests: form.interests,
-            country: form.country.trim() || null,
-            city: form.city.trim() || null,
-            updated_at: new Date().toISOString()
-          },
-          { onConflict: 'id' }
-        );
+        .upsert(profile, { onConflict: 'id' });
 
-      if (error) throw error;
+      if (saveError) throw saveError;
 
-      setSaved(true);
-      setMessage('Your profile has been saved successfully! ❤️');
-    } catch (error) {
-      setMessage(
-        error.message || 'Unable to save your profile. Please try again.'
-      );
+      setSuccess('Your profile has been saved!');
+
+      if (onComplete) {
+        await onComplete();
+      }
+    } catch (err) {
+      setError(err.message || 'Could not save your profile.');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   }
 
-  const inputStyle = {
-    width: '100%',
-    boxSizing: 'border-box',
-    padding: '14px',
-    border: '1px solid #eadfe3',
-    borderRadius: '12px',
-    fontSize: '15px',
-    outlineColor: '#e65b79',
-    background: '#fff',
-    color: '#30232a'
-  };
-
-  const labelStyle = {
-    display: 'block',
-    marginBottom: '8px',
-    fontSize: '14px',
-    fontWeight: 600,
-    color: '#43353b'
-  };
+  if (loading) {
+    return (
+      <div className="profile-loading">
+        <LoaderCircle className="spin" size={30} />
+        <p>Loading your profile...</p>
+      </div>
+    );
+  }
 
   return (
-    <main style={styles.page}>
-      <section style={styles.card}>
-        <button
-          type="button"
-          onClick={() => onComplete?.()}
-          style={styles.backButton}
-        >
-          ← Back
-        </button>
-
-        <div style={styles.logo}>
+    <main className="profile-page">
+      <section className="profile-card">
+        <div className="profile-heading-icon">
           <Heart size={27} fill="currentColor" />
         </div>
 
-        <span style={styles.eyebrow}>
-          YOUR STORY STARTS HERE
-        </span>
+        <p className="profile-eyebrow">YOUR STORY STARTS HERE</p>
 
-        <h1 style={styles.title}>
-          Let's make it <span style={styles.highlight}>you.</span>
-        </h1>
+        <h1>Create your profile</h1>
 
-        <p style={styles.subtitle}>
-          Tell us a little about yourself. Your next meaningful
-          connection starts with being yourself.
+        <p className="profile-subtitle">
+          Tell people a little about yourself and what makes you unique.
         </p>
 
+        {error && (
+          <div className="profile-alert profile-error" role="alert">
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div className="profile-alert profile-success" role="status">
+            <CheckCircle size={18} />
+            {success}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit}>
-          <div style={styles.field}>
-            <label style={labelStyle} htmlFor="full_name">
-              <User size={15} style={styles.labelIcon} />
-              Your full name *
-            </label>
+          <label className="profile-label">
+            <span>
+              <User size={17} /> Full name
+            </span>
 
             <input
-              id="full_name"
               name="full_name"
-              type="text"
-              placeholder="What should we call you?"
               value={form.full_name}
               onChange={updateField}
+              placeholder="What should people call you?"
               maxLength={80}
-              autoComplete="name"
               required
-              style={inputStyle}
             />
-          </div>
+          </label>
 
-          <div style={styles.field}>
-            <label style={labelStyle} htmlFor="date_of_birth">
-              <Calendar size={15} style={styles.labelIcon} />
-              Date of birth *
-            </label>
+          <label className="profile-label">
+            <span>
+              <Calendar size={17} /> Date of birth
+            </span>
 
             <input
-              id="date_of_birth"
               name="date_of_birth"
               type="date"
-              value={form.date_of_birth}
+              value={form.date_of_birth || ''}
               onChange={updateField}
+              max={new Date(
+                new Date().getFullYear() - 18,
+                new Date().getMonth(),
+                new Date().getDate()
+              ).toISOString().slice(0, 10)}
               required
-              style={inputStyle}
             />
 
-            <small style={styles.helpText}>
-              You must be at least 18 years old to use Soulmates.
-            </small>
-          </div>
+            <small>You must be at least 18 years old.</small>
+          </label>
 
-          <div style={styles.field}>
-            <label style={labelStyle} htmlFor="gender">
-              Gender
-            </label>
+          <label className="profile-label">
+            <span>Gender</span>
 
             <select
-              id="gender"
               name="gender"
               value={form.gender}
               onChange={updateField}
-              style={inputStyle}
+              required
             >
-              <option value="">Prefer not to say</option>
-              <option value="Woman">Woman</option>
-              <option value="Man">Man</option>
-              <option value="Non-binary">Non-binary</option>
-              <option value="Other">Other</option>
+              <option value="">Select your gender</option>
+              <option value="man">Man</option>
+              <option value="woman">Woman</option>
+              <option value="non-binary">Non-binary</option>
+              <option value="other">Other</option>
             </select>
+          </label>
+
+          <div className="profile-two-columns">
+            <label className="profile-label">
+              <span>
+                <MapPin size={17} /> Country
+              </span>
+
+              <input
+                name="country"
+                value={form.country}
+                onChange={updateField}
+                placeholder="India"
+                maxLength={80}
+              />
+            </label>
+
+            <label className="profile-label">
+              <span>City</span>
+
+              <input
+                name="city"
+                value={form.city}
+                onChange={updateField}
+                placeholder="Your city"
+                maxLength={100}
+              />
+            </label>
           </div>
 
-          <div style={styles.field}>
-            <label style={labelStyle} htmlFor="bio">
-              About you
-            </label>
+          <label className="profile-label">
+            <span>
+              <Sparkles size={17} /> About me
+            </span>
 
             <textarea
-              id="bio"
               name="bio"
-              placeholder="What makes you, you?"
               value={form.bio}
               onChange={updateField}
-              maxLength={500}
+              placeholder="What do you enjoy? What are you looking for?"
               rows={4}
-              style={{
-                ...inputStyle,
-                resize: 'vertical',
-                lineHeight: 1.6
-              }}
+              maxLength={500}
             />
 
-            <small style={styles.helpText}>
-              {form.bio.length}/500 characters
-            </small>
-          </div>
+            <small>{form.bio.length}/500 characters</small>
+          </label>
 
-          <div style={styles.field}>
-            <label style={labelStyle}>
-              <Sparkles size={15} style={styles.labelIcon} />
-              Your interests
-            </label>
+          <fieldset className="profile-interests">
+            <legend>Choose your interests</legend>
 
-            <p style={styles.helpText}>
-              Choose the things you enjoy.
-            </p>
+            <p>Select the things you enjoy.</p>
 
-            <div style={styles.interests}>
-              {availableInterests.map(interest => {
-                const selected =
-                  form.interests.includes(interest);
+            <div className="profile-interest-list">
+              {INTEREST_OPTIONS.map((interest) => {
+                const selected = form.interests.includes(interest);
 
                 return (
                   <button
                     key={interest}
                     type="button"
+                    className={
+                      selected
+                        ? 'profile-interest selected'
+                        : 'profile-interest'
+                    }
                     aria-pressed={selected}
                     onClick={() => toggleInterest(interest)}
-                    style={{
-                      ...styles.interest,
-                      ...(selected
-                        ? styles.selectedInterest
-                        : {})
-                    }}
                   >
                     {selected ? '✓ ' : '+ '}
                     {interest}
@@ -311,253 +360,26 @@ export default function ProfileSetup({ onComplete }) {
                 );
               })}
             </div>
-          </div>
-
-          <div style={styles.locationGrid}>
-            <div style={styles.field}>
-              <label style={labelStyle} htmlFor="country">
-                <MapPin size={15} style={styles.labelIcon} />
-                Country
-              </label>
-
-              <input
-                id="country"
-                name="country"
-                type="text"
-                placeholder="e.g. India"
-                value={form.country}
-                onChange={updateField}
-                maxLength={100}
-                autoComplete="country-name"
-                style={inputStyle}
-              />
-            </div>
-
-            <div style={styles.field}>
-              <label style={labelStyle} htmlFor="city">
-                City
-              </label>
-
-              <input
-                id="city"
-                name="city"
-                type="text"
-                placeholder="e.g. Mandya"
-                value={form.city}
-                onChange={updateField}
-                maxLength={100}
-                autoComplete="address-level2"
-                style={inputStyle}
-              />
-            </div>
-          </div>
+          </fieldset>
 
           <button
             type="submit"
-            disabled={loading}
-            style={{
-              ...styles.submitButton,
-              opacity: loading ? 0.7 : 1
-            }}
+            className="profile-save-button"
+            disabled={saving}
           >
-            {loading ? (
+            {saving ? (
               <>
-                <LoaderCircle size={18} />
+                <LoaderCircle className="spin" size={19} />
                 Saving profile...
               </>
             ) : (
               <>
-                Save my profile
-                <ArrowRight size={18} />
+                Save my profile <Heart size={19} />
               </>
             )}
           </button>
         </form>
-
-        {message && (
-          <div
-            role="status"
-            aria-live="polite"
-            style={{
-              ...styles.message,
-              ...(saved ? styles.successMessage : {})
-            }}
-          >
-            {saved && <CheckCircle size={19} />}
-            {message}
-          </div>
-        )}
-
-        <p style={styles.privacyNote}>
-          ❤️ Your story matters. Share only what you feel
-          comfortable sharing.
-        </p>
       </section>
     </main>
   );
 }
-
-const styles = {
-  page: {
-    minHeight: '100vh',
-    boxSizing: 'border-box',
-    display: 'flex',
-    justifyContent: 'center',
-    alignItems: 'flex-start',
-    padding: '28px 16px',
-    background: 'linear-gradient(135deg, #fff8f8, #fff0f2)',
-    fontFamily: "'DM Sans', sans-serif"
-  },
-
-  card: {
-    width: '100%',
-    maxWidth: '560px',
-    padding: '28px',
-    boxSizing: 'border-box',
-    background: '#fff',
-    borderRadius: '24px',
-    boxShadow: '0 20px 70px rgba(120, 40, 65, 0.10)'
-  },
-
-  backButton: {
-    padding: '6px 0',
-    border: 'none',
-    background: 'transparent',
-    color: '#71646a',
-    fontSize: '14px',
-    cursor: 'pointer'
-  },
-
-  logo: {
-    width: '54px',
-    height: '54px',
-    marginTop: '20px',
-    marginBottom: '20px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: '18px',
-    background: '#ffe8ed',
-    color: '#e65b79'
-  },
-
-  eyebrow: {
-    color: '#d94f70',
-    fontSize: '11px',
-    fontWeight: 800,
-    letterSpacing: '1.5px'
-  },
-
-  title: {
-    margin: '12px 0',
-    color: '#30232a',
-    fontSize: '34px',
-    lineHeight: 1.2,
-    letterSpacing: '-1px'
-  },
-
-  highlight: {
-    color: '#e65b79'
-  },
-
-  subtitle: {
-    marginBottom: '28px',
-    color: '#7d6e75',
-    fontSize: '14px',
-    lineHeight: 1.7
-  },
-
-  field: {
-    marginBottom: '22px',
-    minWidth: 0
-  },
-
-  labelIcon: {
-    marginRight: '6px',
-    verticalAlign: 'middle',
-    color: '#d95b79'
-  },
-
-  helpText: {
-    display: 'block',
-    marginTop: '7px',
-    color: '#8a7b82',
-    fontSize: '12px',
-    lineHeight: 1.5
-  },
-
-  interests: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '9px',
-    marginTop: '12px'
-  },
-
-  interest: {
-    border: '1px solid #eadfe3',
-    borderRadius: '20px',
-    padding: '10px 13px',
-    background: '#fff',
-    color: '#65545c',
-    fontSize: '13px',
-    cursor: 'pointer'
-  },
-
-  selectedInterest: {
-    background: '#ffe8ed',
-    borderColor: '#e65b79',
-    color: '#b63e5d',
-    fontWeight: 700
-  },
-
-  locationGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-    gap: '14px'
-  },
-
-  submitButton: {
-    width: '100%',
-    minHeight: '52px',
-    padding: '14px',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '10px',
-    border: 'none',
-    borderRadius: '12px',
-    background: 'linear-gradient(100deg, #ed6a86, #df5074)',
-    color: '#fff',
-    fontWeight: 700,
-    fontSize: '15px',
-    cursor: 'pointer'
-  },
-
-  message: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '9px',
-    marginTop: '18px',
-    padding: '13px',
-    borderRadius: '10px',
-    background: '#fff0f0',
-    color: '#a23b50',
-    fontSize: '13px',
-    lineHeight: 1.6,
-    overflowWrap: 'anywhere'
-  },
-
-  successMessage: {
-    background: '#effaf3',
-    color: '#217647'
-  },
-
-  privacyNote: {
-    marginTop: '24px',
-    marginBottom: 0,
-    textAlign: 'center',
-    color: '#8a7b82',
-    fontSize: '12px',
-    lineHeight: 1.7
-  }
-};
