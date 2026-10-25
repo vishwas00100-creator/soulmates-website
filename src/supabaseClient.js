@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = 'https://fmgidrczefxpunuiowie.supabase.co';
 
 const supabaseKey =
-  'sb_publishable_REPLACE_WITH_YOUR_FULL_KEY';
+  'sb_publishable_jaesWf6JoK5ILIaGLaDUEg_4gjaXbna';
 
 export const isSupabaseConfigured = Boolean(
   supabaseUrl &&
