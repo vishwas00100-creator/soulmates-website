@@ -4,11 +4,15 @@ import {
   Heart,
   Mail,
   Lock,
+  User,
   Eye,
   EyeOff,
   ArrowRight,
   LoaderCircle,
   ArrowLeft,
+  Sparkles,
+  ShieldCheck,
+  Check,
 } from 'lucide-react';
 
 export default function Auth({
@@ -29,6 +33,17 @@ export default function Auth({
     setMessage('');
     setError('');
   };
+
+  const getPasswordStrength = (pass) => {
+    if (!pass) return 0;
+    let score = 0;
+    if (pass.length >= 6) score++;
+    if (pass.length >= 10) score++;
+    if (/[A-Z]/.test(pass) && /[0-9]/.test(pass)) score++;
+    return score; // 0, 1, 2, or 3
+  };
+
+  const passwordStrength = getPasswordStrength(password);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -60,28 +75,26 @@ export default function Auth({
 
     try {
       if (mode === 'signup') {
-        const { data, error: signupError } =
-          await supabase.auth.signUp({
-            email: email.trim(),
-            password,
-            options: {
-              data: {
-                full_name: fullName.trim(),
-              },
-              emailRedirectTo: window.location.origin +
-                import.meta.env.BASE_URL,
+        const { data, error: signupError } = await supabase.auth.signUp({
+          email: email.trim(),
+          password,
+          options: {
+            data: {
+              full_name: fullName.trim(),
             },
-          });
+            emailRedirectTo:
+              window.location.origin + import.meta.env.BASE_URL,
+          },
+        });
 
         if (signupError) throw signupError;
 
         if (data.session) {
-          setMessage('Your account has been created successfully!');
-
+          setMessage('Welcome! Your account has been created successfully.');
           if (onSuccess) onSuccess(data.session);
         } else {
           setMessage(
-            'Account created! Please check your email and confirm your account before logging in.'
+            'Account created! Please check your email to confirm your account before logging in.'
           );
           setMode('login');
         }
@@ -95,28 +108,24 @@ export default function Auth({
         if (loginError) throw loginError;
 
         setMessage('Login successful!');
-
         if (onSuccess) onSuccess(data.session);
       } else if (mode === 'forgot') {
         const redirectTo =
           window.location.origin + import.meta.env.BASE_URL;
 
         const { error: resetError } =
-          await supabase.auth.resetPasswordForEmail(
-            email.trim(),
-            { redirectTo }
-          );
+          await supabase.auth.resetPasswordForEmail(email.trim(), {
+            redirectTo,
+          });
 
         if (resetError) throw resetError;
 
         setMessage(
-          'If an account exists for this email, password-reset instructions will be sent.'
+          'If an account exists for this email, password-reset instructions have been sent.'
         );
       }
     } catch (err) {
-      setError(
-        err?.message || 'Something went wrong. Please try again.'
-      );
+      setError(err?.message || 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -129,220 +138,274 @@ export default function Auth({
 
   return (
     <div className="auth-page">
-      <div className="auth-card">
-        <button
-          type="button"
-          className="auth-back"
-          onClick={onBack}
-          aria-label="Go back"
-        >
-          <ArrowLeft size={19} />
-          <span>Back</span>
-        </button>
-
-        <div className="auth-brand">
-          <div className="auth-brand-icon">
-            <Heart size={26} fill="currentColor" />
+      <div className="auth-card-wrapper">
+        {/* Left Editorial Visual Panel (Desktop) */}
+        <div className="auth-showcase">
+          <div className="showcase-badge">
+            <span className="pulse-dot"></span>
+            <span>24,000+ Active Singles</span>
           </div>
 
-          <h1>Soulmates</h1>
+          <div className="showcase-content">
+            <div className="showcase-icon-box">
+              <Heart size={26} fill="currentColor" />
+            </div>
+            <h2>Where true connections bloom.</h2>
+            <p>
+              An intentional, safe sanctuary built for real people, deep
+              chemistry, and genuine conversations.
+            </p>
 
-          <p>
-            {mode === 'signup'
-              ? 'Your next beautiful chapter starts here.'
-              : mode === 'forgot'
-                ? 'Let’s help you get back in.'
-                : 'Real connections. Meaningful relationships.'}
-          </p>
-        </div>
-
-        <div className="auth-tabs">
-          <button
-            type="button"
-            className={mode !== 'signup' && mode !== 'forgot' ? 'active' : ''}
-            onClick={() => changeMode('login')}
-          >
-            Log in
-          </button>
-
-          <button
-            type="button"
-            className={mode === 'signup' ? 'active' : ''}
-            onClick={() => changeMode('signup')}
-          >
-            Sign up
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit}>
-          {mode === 'signup' && (
-            <div className="auth-field">
-              <label htmlFor="auth-name">Full name</label>
-
-              <div className="auth-input-wrap">
-                <input
-                  id="auth-name"
-                  type="text"
-                  placeholder="Enter your name"
-                  value={fullName}
-                  onChange={(event) =>
-                    setFullName(event.target.value)
-                  }
-                  autoComplete="name"
-                  required
-                />
+            <div className="showcase-perks">
+              <div className="perk-item">
+                <Check size={16} /> Verified, authentic profiles
+              </div>
+              <div className="perk-item">
+                <Check size={16} /> Privacy-first matchmaking
+              </div>
+              <div className="perk-item">
+                <Check size={16} /> Meaningful conversations only
               </div>
             </div>
-          )}
-
-          <div className="auth-field">
-            <label htmlFor="auth-email">Email address</label>
-
-            <div className="auth-input-wrap">
-              <Mail size={19} />
-
-              <input
-                id="auth-email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(event) =>
-                  setEmail(event.target.value)
-                }
-                autoComplete="email"
-                required
-              />
-            </div>
           </div>
 
+          <div className="showcase-quote">
+            <p>
+              “We connected on Soulmates last spring. It was the first time an
+              app felt real, respectful, and magical.”
+            </p>
+            <span>— Maya &amp; Rohan, Bangalore</span>
+          </div>
+        </div>
+
+        {/* Right Form Panel */}
+        <div className="auth-form-panel">
+          {onBack && (
+            <button
+              type="button"
+              className="auth-back-btn"
+              onClick={onBack}
+              aria-label="Go back"
+            >
+              <ArrowLeft size={16} />
+              <span>Back to home</span>
+            </button>
+          )}
+
+          <div className="auth-header">
+            <div className="mobile-brand">
+              <div className="brand-heart small">
+                <Heart size={16} fill="currentColor" />
+              </div>
+              <span>Soulmates<span className="brand-dot">.</span></span>
+            </div>
+
+            <h1>
+              {mode === 'signup'
+                ? 'Create Your Profile'
+                : mode === 'forgot'
+                  ? 'Reset Your Password'
+                  : 'Welcome Back'}
+            </h1>
+            <p>
+              {mode === 'signup'
+                ? 'Take the first step toward someone extraordinary.'
+                : mode === 'forgot'
+                  ? 'Enter your registered email and we’ll help you get back in.'
+                  : 'Enter your credentials to continue your journey.'}
+            </p>
+          </div>
+
+          {/* Mode Tabs */}
           {mode !== 'forgot' && (
-            <div className="auth-field">
-              <label htmlFor="auth-password">Password</label>
-
-              <div className="auth-input-wrap">
-                <Lock size={19} />
-
-                <input
-                  id="auth-password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="At least 6 characters"
-                  value={password}
-                  onChange={(event) =>
-                    setPassword(event.target.value)
-                  }
-                  autoComplete={
-                    mode === 'signup'
-                      ? 'new-password'
-                      : 'current-password'
-                  }
-                  minLength={6}
-                  required
-                />
-
-                <button
-                  type="button"
-                  className="auth-password-toggle"
-                  onClick={() =>
-                    setShowPassword((previous) => !previous)
-                  }
-                  aria-label={
-                    showPassword ? 'Hide password' : 'Show password'
-                  }
-                >
-                  {showPassword
-                    ? <EyeOff size={19} />
-                    : <Eye size={19} />}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {mode === 'login' && (
-            <div className="auth-forgot-row">
+            <div className="auth-segmented-tabs">
               <button
                 type="button"
-                className="auth-text-button"
-                onClick={() => changeMode('forgot')}
+                className={mode === 'login' ? 'active' : ''}
+                onClick={() => changeMode('login')}
               >
-                Forgot password?
+                Log In
+              </button>
+              <button
+                type="button"
+                className={mode === 'signup' ? 'active' : ''}
+                onClick={() => changeMode('signup')}
+              >
+                Sign Up
               </button>
             </div>
           )}
 
-          {error && (
-            <div className="auth-alert auth-alert-error" role="alert">
-              {error}
-            </div>
-          )}
-
-          {message && (
-            <div
-              className="auth-alert auth-alert-success"
-              role="status"
-            >
-              {message}
-            </div>
-          )}
-
-          <button
-            className="auth-submit"
-            type="submit"
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <LoaderCircle className="auth-spinner" size={20} />
-                Please wait...
-              </>
-            ) : (
-              <>
-                {mode === 'signup'
-                  ? 'Create account'
-                  : mode === 'forgot'
-                    ? 'Send reset email'
-                    : 'Log in'}
-
-                <ArrowRight size={19} />
-              </>
+          <form className="auth-form" onSubmit={handleSubmit}>
+            {mode === 'signup' && (
+              <div className="field-group">
+                <label htmlFor="auth-name">Your Full Name</label>
+                <div className="input-wrap">
+                  <User className="input-icon" size={18} />
+                  <input
+                    id="auth-name"
+                    type="text"
+                    placeholder="e.g. Maya Sharma"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    autoComplete="name"
+                    required
+                  />
+                </div>
+              </div>
             )}
-          </button>
-        </form>
 
-        {mode === 'forgot' && (
-          <button
-            type="button"
-            className="auth-text-button auth-return-login"
-            onClick={() => changeMode('login')}
-          >
-            Return to login
-          </button>
-        )}
+            <div className="field-group">
+              <label htmlFor="auth-email">Email Address</label>
+              <div className="input-wrap">
+                <Mail className="input-icon" size={18} />
+                <input
+                  id="auth-email"
+                  type="email"
+                  placeholder="you@domain.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  required
+                />
+              </div>
+            </div>
 
-        {mode !== 'forgot' && (
-          <p className="auth-switch">
-            {mode === 'signup'
-              ? 'Already have an account?'
-              : 'New to Soulmates?'}
+            {mode !== 'forgot' && (
+              <div className="field-group">
+                <div className="field-label-row">
+                  <label htmlFor="auth-password">Password</label>
+                  {mode === 'login' && (
+                    <button
+                      type="button"
+                      className="inline-forgot-btn"
+                      onClick={() => changeMode('forgot')}
+                    >
+                      Forgot?
+                    </button>
+                  )}
+                </div>
+
+                <div className="input-wrap">
+                  <Lock className="input-icon" size={18} />
+                  <input
+                    id="auth-password"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="At least 6 characters"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete={
+                      mode === 'signup'
+                        ? 'new-password'
+                        : 'current-password'
+                    }
+                    minLength={6}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="password-toggle-btn"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    aria-label={
+                      showPassword ? 'Hide password' : 'Show password'
+                    }
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+
+                {/* Password Strength Meter on Signup */}
+                {mode === 'signup' && password.length > 0 && (
+                  <div className="password-meter-wrap">
+                    <div className="password-meter-bars">
+                      <span className={`bar ${passwordStrength >= 1 ? 'active' : ''}`} />
+                      <span className={`bar ${passwordStrength >= 2 ? 'active' : ''}`} />
+                      <span className={`bar ${passwordStrength >= 3 ? 'active' : ''}`} />
+                    </div>
+                    <span className="password-meter-label">
+                      {passwordStrength === 1 && 'Basic'}
+                      {passwordStrength === 2 && 'Good'}
+                      {passwordStrength >= 3 && 'Strong'}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {error && (
+              <div className="auth-feedback-alert error" role="alert">
+                <span>{error}</span>
+              </div>
+            )}
+
+            {message && (
+              <div className="auth-feedback-alert success" role="status">
+                <span>{message}</span>
+              </div>
+            )}
 
             <button
-              type="button"
-              className="auth-text-button"
-              onClick={() =>
-                changeMode(
-                  mode === 'signup' ? 'login' : 'signup'
-                )
-              }
+              className="auth-primary-submit"
+              type="submit"
+              disabled={loading}
             >
-              {mode === 'signup' ? 'Log in' : 'Join for free'}
+              {loading ? (
+                <>
+                  <LoaderCircle className="auth-btn-spinner" size={18} />
+                  <span>Connecting...</span>
+                </>
+              ) : (
+                <>
+                  <span>
+                    {mode === 'signup'
+                      ? 'Create My Account'
+                      : mode === 'forgot'
+                        ? 'Send Reset Link'
+                        : 'Sign In'}
+                  </span>
+                  <ArrowRight size={18} />
+                </>
+              )}
             </button>
-          </p>
-        )}
+          </form>
 
-        <p className="auth-terms">
-          By continuing, you agree to use Soulmates respectfully
-          and follow our community guidelines.
-        </p>
+          {mode === 'forgot' && (
+            <div className="auth-switch-box">
+              <button
+                type="button"
+                className="auth-link-btn"
+                onClick={() => changeMode('login')}
+              >
+                <ArrowLeft size={14} /> Back to Sign In
+              </button>
+            </div>
+          )}
+
+          {mode !== 'forgot' && (
+            <div className="auth-switch-box">
+              <span>
+                {mode === 'signup'
+                  ? 'Already have an account?'
+                  : "Don't have an account yet?"}
+              </span>
+              <button
+                type="button"
+                className="auth-link-btn highlight"
+                onClick={() =>
+                  changeMode(mode === 'signup' ? 'login' : 'signup')
+                }
+              >
+                {mode === 'signup' ? 'Sign In' : 'Join Soulmates'}
+              </button>
+            </div>
+          )}
+
+          <div className="auth-footer-note">
+            <ShieldCheck size={14} />
+            <span>End-to-end encrypted &amp; community guarded.</span>
+          </div>
+        </div>
       </div>
     </div>
   );
-}
+                  }
